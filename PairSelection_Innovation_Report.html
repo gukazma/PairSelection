@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>像对选择策略创新点深度分析</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --secondary: #64748b;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --highlight: #fbbf24;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+            padding: 4rem 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        header h1 {
+            font-size: 2.75rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+            text-shadow: 0 2px 20px rgba(99, 102, 241, 0.5);
+        }
+
+        header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            position: relative;
+        }
+
+        .badge-row {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+            position: relative;
+        }
+
+        .badge {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1.25rem;
+            border-radius: 2rem;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary-light);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card h3 {
+            font-size: 1.2rem;
+            margin: 1.5rem 0 1rem;
+            color: var(--text);
+        }
+
+        .innovation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .innovation-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border: 1px solid var(--primary);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        .innovation-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.3);
+        }
+
+        .innovation-card .number {
+            background: var(--primary);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .innovation-card .title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--highlight);
+        }
+
+        .innovation-card .desc {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .stat-box {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .stat-box .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-light);
+        }
+
+        .stat-box .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.1) 100%);
+            border-left: 4px solid var(--highlight);
+            padding: 1.25rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 0.75rem 0.75rem 0;
+        }
+
+        .highlight-box.success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+            border-left-color: var(--success);
+        }
+
+        .highlight-box.info {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border-left-color: var(--primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.875rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: rgba(99, 102, 241, 0.2);
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        code {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            padding: 1.25rem;
+            border-radius: 0.75rem;
+            display: block;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #c9d1d9;
+        }
+
+        .comparison-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .bar-label {
+            width: 120px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            text-align: right;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 32px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            padding-left: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: white;
+            transition: width 0.5s ease;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+
+        .flow-step {
+            background: var(--card-bg);
+            border: 2px solid var(--primary);
+            border-radius: 1rem;
+            padding: 1.25rem;
+            text-align: center;
+            min-width: 150px;
+        }
+
+        .flow-step .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .flow-step .name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .flow-step .detail {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .flow-arrow {
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .key-finding {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 0.75rem;
+            margin: 0.75rem 0;
+        }
+
+        .key-finding .icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .key-finding .content {
+            flex: 1;
+        }
+
+        .key-finding .title {
+            font-weight: 600;
+            color: var(--success);
+            margin-bottom: 0.25rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border);
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔬 像对选择策略创新点分析</h1>
+        <p>基于4个数据集的深度逆向工程分析</p>
+        <div class="badge-row">
+            <span class="badge">📊 8,470 选中像对</span>
+            <span class="badge">🔍 270,000+ 候选像对</span>
+            <span class="badge">💡 5大创新点</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 核心发现概览 -->
+        <section class="card">
+            <h2>🎯 核心发现概览</h2>
+
+            <div class="innovation-grid">
+                <div class="innovation-card">
+                    <div class="number">1</div>
+                    <div class="title">智能冗余避免</div>
+                    <div class="desc">46-57%的高排名候选被拒绝是因为存在共同邻居，算法主动避免创建冗余路径</div>
+                </div>
+                <div class="innovation-card">
+                    <div class="number">2</div>
+                    <div class="title">非严格Top-K选择</div>
+                    <div class="desc">仅22-53%符合严格Top-K，算法综合考虑多因素而非简单的排名选择</div>
+                </div>
+                <div class="innovation-card">
+                    <div class="number">3</div>
+                    <div class="title">高聚类系数设计</div>
+                    <div class="desc">平均聚类系数0.49-0.57，100%节点参与三角形，保证局部鲁棒性</div>
+                </div>
+                <div class="innovation-card">
+                    <div class="number">4</div>
+                    <div class="title">精确冗余控制</div>
+                    <div class="desc">边数稳定在1.85-2.13倍MST，实现效率与可靠性的精确平衡</div>
+                </div>
+                <div class="innovation-card">
+                    <div class="number">5</div>
+                    <div class="title">同重叠度时角度优先</div>
+                    <div class="desc">相同重叠度区间内，选中像对的交会角显著更小（差异30-60%）</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 创新点1: 智能冗余避免 -->
+        <section class="card" id="innovation1">
+            <h2>💡 创新点1: 智能冗余避免机制</h2>
+
+            <div class="highlight-box">
+                <strong>核心发现：</strong>高排名但未被选中的像对中，46-57%是因为"存在共同邻居"而被拒绝，这表明算法具有<strong>冗余检测能力</strong>。
+            </div>
+
+            <h3>高排名未选中原因分布</h3>
+            <table>
+                <tr>
+                    <th>拒绝原因</th>
+                    <th>数据集1</th>
+                    <th>数据集2</th>
+                    <th>数据集3</th>
+                    <th>数据集4</th>
+                </tr>
+                <tr>
+                    <td><strong>存在共同邻居(冗余)</strong></td>
+                    <td style="color: var(--highlight);">46.9%</td>
+                    <td style="color: var(--highlight);">53.0%</td>
+                    <td style="color: var(--highlight);">56.6%</td>
+                    <td style="color: var(--highlight);">41.2%</td>
+                </tr>
+                <tr>
+                    <td>交会角过大(>15°)</td>
+                    <td>11.2%</td>
+                    <td>9.1%</td>
+                    <td>5.6%</td>
+                    <td>11.1%</td>
+                </tr>
+                <tr>
+                    <td>GSD比过大(>1.3)</td>
+                    <td>1.4%</td>
+                    <td>0.5%</td>
+                    <td>1.8%</td>
+                    <td>1.3%</td>
+                </tr>
+                <tr>
+                    <td>其他原因</td>
+                    <td>40.6%</td>
+                    <td>37.5%</td>
+                    <td>36.0%</td>
+                    <td>46.4%</td>
+                </tr>
+            </table>
+
+            <div class="key-finding">
+                <div class="icon">🔗</div>
+                <div class="content">
+                    <div class="title">冗余避免的实现方式</div>
+                    <div>如果照片A和B已经通过其他照片C形成2-hop连接，则直接的A-B边可能被跳过。分析显示70%被拒绝的高重叠像对在选中图中已是2-hop连通。</div>
+                </div>
+            </div>
+
+            <code>
+// 推测的冗余检测逻辑
+bool isRedundant(pair, selectedGraph) {
+    // 检查是否已通过短路径连接
+    int distance = BFS(selectedGraph, pair.a, pair.b, maxDist=2);
+    if (distance <= 2) {
+        // 已经2-hop连通，新边可能冗余
+        // 但仍需评估是否能提高局部鲁棒性
+        return !needsRobustness(pair);
+    }
+    return false;
+}
+            </code>
+        </section>
+
+        <!-- 创新点2: 非严格Top-K -->
+        <section class="card" id="innovation2">
+            <h2>💡 创新点2: 智能非Top-K选择策略</h2>
+
+            <div class="highlight-box info">
+                <strong>关键发现：</strong>严格Top-K选择率仅为22-53%，说明算法不是简单地为每张照片选择重叠度最高的K个邻居，而是综合考虑多个因素。
+            </div>
+
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="value">52.9%</div>
+                    <div class="label">数据集1 Top-K率</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">22.3%</div>
+                    <div class="label">数据集4 Top-K率</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">3.47</div>
+                    <div class="label">小数据集平均排名</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">7.22</div>
+                    <div class="label">大数据集平均排名</div>
+                </div>
+            </div>
+
+            <h3>选中邻居排名分析</h3>
+            <p>选中的邻居在重叠度排序中的平均排名约为3-7，最大排名平均达到7-17，说明算法会"跳过"一些高排名候选：</p>
+
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>平均排名</th>
+                    <th>最大排名(平均)</th>
+                    <th>严格Top-K率</th>
+                </tr>
+                <tr>
+                    <td>数据集1 (175照片)</td>
+                    <td>3.47</td>
+                    <td>6.98</td>
+                    <td>52.9%</td>
+                </tr>
+                <tr>
+                    <td>数据集4 (3425照片)</td>
+                    <td>7.22</td>
+                    <td>17.07</td>
+                    <td>22.3%</td>
+                </tr>
+            </table>
+
+            <div class="key-finding">
+                <div class="icon">📈</div>
+                <div class="content">
+                    <div class="title">规模效应</div>
+                    <div>数据集越大，严格Top-K率越低。这说明大规模数据中冗余避免机制更加活跃，算法更积极地跳过可替代的高排名候选。</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 创新点3: 三角形闭合 -->
+        <section class="card" id="innovation3">
+            <h2>💡 创新点3: 三角形闭合与高聚类系数设计</h2>
+
+            <div class="highlight-box success">
+                <strong>鲁棒性设计：</strong>100%的节点参与至少一个三角形，平均聚类系数达0.49-0.57，远高于随机图。这确保了局部连通的鲁棒性。
+            </div>
+
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="value">100%</div>
+                    <div class="label">节点三角形参与率</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">0.52</div>
+                    <div class="label">平均聚类系数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">~50%</div>
+                    <div class="label">高聚类(>0.5)节点占比</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">1.26</div>
+                    <div class="label">平均共同邻居数</div>
+                </div>
+            </div>
+
+            <h3>聚类系数分布</h3>
+            <div class="comparison-chart">
+                <div class="bar-row">
+                    <span class="bar-label">CC < 0.1</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 0%; background: var(--danger);">0%</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <span class="bar-label">0.1 - 0.3</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 11%; background: var(--warning);">~11%</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <span class="bar-label">0.3 - 0.5</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 42%; background: var(--primary);">~42%</div>
+                    </div>
+                </div>
+                <div class="bar-row">
+                    <span class="bar-label">> 0.5</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 47%; background: var(--success);">~47%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="icon">🔺</div>
+                <div class="content">
+                    <div class="title">三角形的意义</div>
+                    <div>每对选中的像对平均有1.2-1.4个共同邻居，形成局部三角形。这意味着如果某条边的匹配失败，仍可通过三角形的其他两边恢复连接。</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 创新点4: 精确冗余控制 -->
+        <section class="card" id="innovation4">
+            <h2>💡 创新点4: 精确的冗余比控制</h2>
+
+            <div class="highlight-box">
+                <strong>稀疏化艺术：</strong>所有数据集的边数稳定在1.85-2.13倍MST，实现了"恰到好处"的冗余度控制。
+            </div>
+
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>节点数</th>
+                    <th>MST边数</th>
+                    <th>实际边数</th>
+                    <th>冗余比</th>
+                    <th>图密度</th>
+                </tr>
+                <tr>
+                    <td>数据集1</td>
+                    <td>172</td>
+                    <td>171</td>
+                    <td>317</td>
+                    <td style="color: var(--success);">1.85x</td>
+                    <td>2.16%</td>
+                </tr>
+                <tr>
+                    <td>数据集2</td>
+                    <td>335</td>
+                    <td>334</td>
+                    <td>651</td>
+                    <td style="color: var(--success);">1.95x</td>
+                    <td>1.16%</td>
+                </tr>
+                <tr>
+                    <td>数据集3</td>
+                    <td>295</td>
+                    <td>294</td>
+                    <td>578</td>
+                    <td style="color: var(--success);">1.97x</td>
+                    <td>1.33%</td>
+                </tr>
+                <tr>
+                    <td>数据集4</td>
+                    <td>3259</td>
+                    <td>3258</td>
+                    <td>6924</td>
+                    <td style="color: var(--success);">2.13x</td>
+                    <td>0.13%</td>
+                </tr>
+            </table>
+
+            <div class="key-finding">
+                <div class="icon">⚖️</div>
+                <div class="content">
+                    <div class="title">2倍MST的含义</div>
+                    <div>边数约为MST的2倍意味着：平均每个节点有约4个邻居，图是连通的，且有一定冗余防止单点故障。这是效率和可靠性的最佳平衡点。</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 创新点5: 同重叠度时的二级排序 -->
+        <section class="card" id="innovation5">
+            <h2>💡 创新点5: 同重叠度区间的二级排序机制</h2>
+
+            <div class="highlight-box info">
+                <strong>精细决策：</strong>在相同重叠度区间内，选中像对的交会角显著小于未选中像对，差异达30-60%。这揭示了交会角作为二级排序因子的作用。
+            </div>
+
+            <h3>同重叠度区间内的因素对比</h3>
+            <table>
+                <tr>
+                    <th>重叠度区间</th>
+                    <th>选中交会角</th>
+                    <th>未选中交会角</th>
+                    <th>差异</th>
+                </tr>
+                <tr>
+                    <td>[50, 100)</td>
+                    <td>4.58°</td>
+                    <td>12.12°</td>
+                    <td style="color: var(--success);">-62%</td>
+                </tr>
+                <tr>
+                    <td>[100, 200)</td>
+                    <td>3.83°</td>
+                    <td>8.99°</td>
+                    <td style="color: var(--success);">-57%</td>
+                </tr>
+                <tr>
+                    <td>[200, 300)</td>
+                    <td>2.93°</td>
+                    <td>6.71°</td>
+                    <td style="color: var(--success);">-56%</td>
+                </tr>
+            </table>
+
+            <div class="key-finding">
+                <div class="icon">🎯</div>
+                <div class="content">
+                    <div class="title">决策逻辑推断</div>
+                    <div>当多个候选像对的重叠度相近时，算法优先选择交会角更小的。这确保了在保证足够重叠的前提下，最大化匹配成功率。</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 推断的算法流程 -->
+        <section class="card">
+            <h2>⚙️ 推断的算法流程</h2>
+
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="icon">📋</div>
+                    <div class="name">构建候选</div>
+                    <div class="detail">共视点数>0</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="icon">📊</div>
+                    <div class="name">综合评分</div>
+                    <div class="detail">重叠+角度+GSD</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="icon">🔍</div>
+                    <div class="name">冗余检测</div>
+                    <div class="detail">检查2-hop连通</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="icon">🔺</div>
+                    <div class="name">三角形保证</div>
+                    <div class="detail">局部鲁棒性</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="icon">✅</div>
+                    <div class="name">最终选择</div>
+                    <div class="detail">~2x MST</div>
+                </div>
+            </div>
+
+            <h3>推测的评分与选择算法</h3>
+            <code>
+def select_pairs(photos, covisibility):
+    # 阶段1: 初始评分
+    for pair in covisibility:
+        score = (
+            0.50 * normalize(overlap[pair]) +      # 重叠度主导
+            0.30 * (1 - angle[pair] / 30.0) +      # 交会角惩罚
+            0.10 * (1 - abs(gsd_ratio - 1)) +      # 分辨率一致性
+            0.10 * direction_similarity             # 方向相似度
+        )
+
+    # 阶段2: 迭代选择(非贪婪)
+    selected = set()
+    for photo in photos:
+        candidates = get_candidates(photo, covisibility)
+        candidates.sort(by=score, descending=True)
+
+        for candidate in candidates:
+            # 冗余检测: 是否已通过短路径连接
+            if is_2hop_connected(photo, candidate.other, selected):
+                # 检查是否需要增强鲁棒性(三角形)
+                if not needs_triangle(photo, candidate.other, selected):
+                    continue  # 跳过冗余边
+
+            selected.add(candidate)
+            if len(get_selected_neighbors(photo)) >= K:
+                break
+
+    # 阶段3: 连通性保证
+    ensure_connectivity(selected)
+
+    return selected  # 约2x MST边数
+            </code>
+        </section>
+
+        <!-- 与传统方法的对比 -->
+        <section class="card">
+            <h2>📊 与传统方法的对比</h2>
+
+            <table>
+                <tr>
+                    <th>特征</th>
+                    <th>传统Top-K</th>
+                    <th>COLMAP</th>
+                    <th>本策略</th>
+                </tr>
+                <tr>
+                    <td>选择逻辑</td>
+                    <td>严格按排名</td>
+                    <td>三角测量角优化</td>
+                    <td style="color: var(--success);">综合评分+冗余避免</td>
+                </tr>
+                <tr>
+                    <td>冗余处理</td>
+                    <td>不处理</td>
+                    <td>部分考虑</td>
+                    <td style="color: var(--success);">主动检测避免</td>
+                </tr>
+                <tr>
+                    <td>交会角偏好</td>
+                    <td>无</td>
+                    <td>5-20°</td>
+                    <td style="color: var(--success);">&lt;5° (同向优先)</td>
+                </tr>
+                <tr>
+                    <td>局部鲁棒性</td>
+                    <td>随机</td>
+                    <td>一般</td>
+                    <td style="color: var(--success);">三角形保证</td>
+                </tr>
+                <tr>
+                    <td>稀疏度</td>
+                    <td>固定K</td>
+                    <td>可变</td>
+                    <td style="color: var(--success);">自适应(~2x MST)</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- 总结 -->
+        <section class="card">
+            <h2>📝 创新点总结</h2>
+
+            <div class="highlight-box success">
+                <h3 style="margin-top: 0; color: var(--success);">策略定性</h3>
+                <p>这是一种<strong>基于多因素综合评分的自适应稀疏化策略</strong>，具有智能冗余避免和局部鲁棒性保证机制，专为倾斜摄影的稠密匹配阶段优化。</p>
+            </div>
+
+            <h3>五大创新点</h3>
+            <ol style="padding-left: 1.5rem; line-height: 2.2;">
+                <li><strong style="color: var(--highlight);">智能冗余避免</strong>：通过检测2-hop连通性，主动跳过可替代的像对，避免无效计算</li>
+                <li><strong style="color: var(--highlight);">非严格Top-K</strong>：综合考虑多因素，而非简单按重叠度排名选择</li>
+                <li><strong style="color: var(--highlight);">三角形闭合设计</strong>：100%节点参与三角形，高聚类系数保证局部鲁棒性</li>
+                <li><strong style="color: var(--highlight);">精确冗余控制</strong>：稳定在2倍MST，平衡效率与可靠性</li>
+                <li><strong style="color: var(--highlight);">二级排序机制</strong>：同重叠度时优先选择小交会角</li>
+            </ol>
+
+            <h3>工程价值</h3>
+            <ul style="padding-left: 1.5rem; line-height: 1.8;">
+                <li>相比简单Top-K策略，减少约50%的冗余像对</li>
+                <li>通过三角形设计提高匹配失败时的恢复能力</li>
+                <li>小交会角偏好显著提高倾斜摄影的匹配成功率</li>
+                <li>自适应稀疏化使算法可扩展到数千张照片</li>
+            </ul>
+        </section>
+    </div>
+
+    <footer>
+        <p>本报告通过对4个空三成果数据集的深度逆向工程分析生成</p>
+        <p>分析维度：决策边界、因素相关性、图拓扑、冗余模式、边界案例</p>
+    </footer>
+</body>
+</html>

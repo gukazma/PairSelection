@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>像对选择策略分析报告</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --secondary: #64748b;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1d4ed8 100%);
+            color: white;
+            padding: 3rem 2rem;
+            margin-bottom: 2rem;
+            border-radius: 0 0 1rem 1rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .meta-info {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            background: rgba(255,255,255,0.15);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid var(--border);
+        }
+
+        .card h2 {
+            color: var(--primary);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card h3 {
+            color: var(--text);
+            font-size: 1.2rem;
+            margin: 1.5rem 0 1rem 0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg) 0%, white 100%);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-card .label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        .stat-card.highlight {
+            border-color: var(--success);
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        }
+
+        .stat-card.highlight .value {
+            color: var(--success);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg);
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        tr:hover {
+            background: var(--bg);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+        .badge-info { background: #dbeafe; color: #1e40af; }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left: 4px solid var(--primary);
+            padding: 1rem 1.5rem;
+            margin: 1rem 0;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .highlight-box.warning {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border-left-color: var(--warning);
+        }
+
+        .highlight-box.success {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-left-color: var(--success);
+        }
+
+        code {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            display: block;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin: 1rem 0;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .bar-label {
+            width: 120px;
+            font-size: 0.85rem;
+            text-align: right;
+            color: var(--text-muted);
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 28px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .bar-compare {
+            display: flex;
+            gap: 2px;
+            height: 100%;
+        }
+
+        .bar-compare .selected {
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+        }
+
+        .bar-compare .not-selected {
+            background: linear-gradient(90deg, #94a3b8, #64748b);
+        }
+
+        .factor-card {
+            border: 2px solid var(--border);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .factor-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        }
+
+        .factor-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .factor-card .title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .factor-card .desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .factor-card .metric {
+            display: flex;
+            justify-content: space-around;
+            border-top: 1px solid var(--border);
+            padding-top: 1rem;
+        }
+
+        .factor-card .metric-item {
+            text-align: center;
+        }
+
+        .factor-card .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .factor-card .metric-value.good { color: var(--success); }
+        .factor-card .metric-value.bad { color: var(--secondary); }
+
+        .factor-card .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .dataset-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .dataset-tab {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dataset-tab:hover, .dataset-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+
+        .flow-step {
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            text-align: center;
+            min-width: 140px;
+        }
+
+        .flow-step .num {
+            background: var(--primary);
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 0.5rem;
+            font-weight: 600;
+        }
+
+        .flow-arrow {
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .toc {
+            background: var(--bg);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .toc h4 {
+            margin-bottom: 0.75rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .toc ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .toc a {
+            color: var(--primary);
+            text-decoration: none;
+            padding: 0.25rem 0.75rem;
+            background: white;
+            border-radius: 0.25rem;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .toc a:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            header { padding: 2rem 1rem; }
+            header h1 { font-size: 1.75rem; }
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>像对选择策略分析报告</h1>
+            <p>基于4个数据集的共同点反推分析</p>
+            <div class="meta-info">
+                <span class="meta-item">分析数据集: 4个</span>
+                <span class="meta-item">总照片数: 4,240张</span>
+                <span class="meta-item">总像对数: 8,470对</span>
+                <span class="meta-item">分析日期: 2026年1月</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <nav class="toc">
+            <h4>目录导航</h4>
+            <ul>
+                <li><a href="#overview">数据概览</a></li>
+                <li><a href="#factors">四大选择因素</a></li>
+                <li><a href="#overlap">重叠度分析</a></li>
+                <li><a href="#convergence">交会角分析</a></li>
+                <li><a href="#resolution">分辨率分析</a></li>
+                <li><a href="#direction">方向向量分析</a></li>
+                <li><a href="#algorithm">算法推断</a></li>
+                <li><a href="#conclusion">结论</a></li>
+            </ul>
+        </nav>
+
+        <!-- 数据概览 -->
+        <section id="overview" class="card">
+            <h2>📊 数据概览</h2>
+            <p>分析4个不同规模的数据集，寻找像对选择的共同规律：</p>
+
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>照片数</th>
+                    <th>选中像对</th>
+                    <th>候选像对</th>
+                    <th>选择率</th>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-info">数据集1</span></td>
+                    <td>175</td>
+                    <td>317</td>
+                    <td>3,366</td>
+                    <td>9.4%</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-info">数据集2</span></td>
+                    <td>340</td>
+                    <td>651</td>
+                    <td>10,871</td>
+                    <td>6.0%</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-info">数据集3</span></td>
+                    <td>300</td>
+                    <td>578</td>
+                    <td>8,878</td>
+                    <td>6.5%</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-info">数据集4</span></td>
+                    <td>3,425</td>
+                    <td>6,924</td>
+                    <td>222,006</td>
+                    <td>3.1%</td>
+                </tr>
+                <tr style="font-weight: bold; background: var(--bg);">
+                    <td>合计</td>
+                    <td>4,240</td>
+                    <td>8,470</td>
+                    <td>245,121</td>
+                    <td>3.5%</td>
+                </tr>
+            </table>
+
+            <div class="highlight-box">
+                <strong>关键发现：</strong>算法仅选择约 <strong>3.5%</strong> 的候选像对，采用高度稀疏化策略，大幅减少计算量同时保证重建质量。
+            </div>
+        </section>
+
+        <!-- 四大选择因素 -->
+        <section id="factors" class="card">
+            <h2>🎯 四大选择因素</h2>
+
+            <div class="highlight-box success">
+                <strong>策略核心：</strong>像对选择主要考虑以下四个因素：<strong>重叠度、交会角、分辨率、方向向量</strong>。不依赖空间距离和架次信息。
+            </div>
+
+            <div class="grid grid-4" style="margin-top: 1.5rem;">
+                <div class="factor-card">
+                    <div class="icon">📐</div>
+                    <div class="title">重叠度</div>
+                    <div class="desc">共视连接点数量</div>
+                    <div class="metric">
+                        <div class="metric-item">
+                            <div class="metric-value good">85.0</div>
+                            <div class="metric-label">选中平均</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value bad">13.9</div>
+                            <div class="metric-label">未选中</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="factor-card">
+                    <div class="icon">📏</div>
+                    <div class="title">交会角</div>
+                    <div class="desc">光轴方向夹角</div>
+                    <div class="metric">
+                        <div class="metric-item">
+                            <div class="metric-value good">4.2°</div>
+                            <div class="metric-label">选中平均</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value bad">20.6°</div>
+                            <div class="metric-label">未选中</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="factor-card">
+                    <div class="icon">🔍</div>
+                    <div class="title">分辨率比</div>
+                    <div class="desc">GSD一致性</div>
+                    <div class="metric">
+                        <div class="metric-item">
+                            <div class="metric-value good">1.05</div>
+                            <div class="metric-label">选中平均</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value bad">1.20</div>
+                            <div class="metric-label">未选中</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="factor-card">
+                    <div class="icon">🧭</div>
+                    <div class="title">方向相似度</div>
+                    <div class="desc">光轴方向余弦</div>
+                    <div class="metric">
+                        <div class="metric-item">
+                            <div class="metric-value good">0.99</div>
+                            <div class="metric-label">选中平均</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value bad">0.88</div>
+                            <div class="metric-label">未选中</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>因素差异汇总</h3>
+            <table>
+                <tr>
+                    <th>因素</th>
+                    <th>选中像对</th>
+                    <th>未选中像对</th>
+                    <th>差异幅度</th>
+                    <th>选择倾向</th>
+                </tr>
+                <tr>
+                    <td><strong>重叠度</strong> (共视点数)</td>
+                    <td>85.0</td>
+                    <td>13.9</td>
+                    <td><span class="badge badge-success">+511%</span></td>
+                    <td>优先选择高重叠</td>
+                </tr>
+                <tr>
+                    <td><strong>交会角</strong> (度)</td>
+                    <td>4.2°</td>
+                    <td>20.6°</td>
+                    <td><span class="badge badge-success">-80%</span></td>
+                    <td>优先选择小角度</td>
+                </tr>
+                <tr>
+                    <td><strong>分辨率比</strong> (GSD比)</td>
+                    <td>1.05</td>
+                    <td>1.20</td>
+                    <td><span class="badge badge-info">-13%</span></td>
+                    <td>优先选择相近分辨率</td>
+                </tr>
+                <tr>
+                    <td><strong>方向相似度</strong> (余弦值)</td>
+                    <td>0.99</td>
+                    <td>0.88</td>
+                    <td><span class="badge badge-info">+13%</span></td>
+                    <td>优先选择同向拍摄</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- 重叠度分析 -->
+        <section id="overlap" class="card">
+            <h2>📐 重叠度分析 (共视点数)</h2>
+
+            <div class="highlight-box success">
+                <strong>最重要因素：</strong>重叠度是区分选中/未选中像对最显著的因素，选中像对的共视点数是未选中的 <strong>6.1倍</strong>。
+            </div>
+
+            <h3>各数据集统计</h3>
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>选中平均</th>
+                    <th>选中中位数</th>
+                    <th>未选中平均</th>
+                    <th>未选中中位数</th>
+                    <th>倍数</th>
+                </tr>
+                <tr>
+                    <td>数据集1</td>
+                    <td><strong>283.5</strong></td>
+                    <td>276</td>
+                    <td>63.2</td>
+                    <td>31</td>
+                    <td><span class="badge badge-success">4.5x</span></td>
+                </tr>
+                <tr>
+                    <td>数据集2</td>
+                    <td><strong>209.7</strong></td>
+                    <td>200</td>
+                    <td>41.5</td>
+                    <td>17</td>
+                    <td><span class="badge badge-success">5.1x</span></td>
+                </tr>
+                <tr>
+                    <td>数据集3</td>
+                    <td><strong>218.9</strong></td>
+                    <td>213</td>
+                    <td>44.2</td>
+                    <td>23</td>
+                    <td><span class="badge badge-success">5.0x</span></td>
+                </tr>
+                <tr>
+                    <td>数据集4</td>
+                    <td><strong>52.6</strong></td>
+                    <td>40</td>
+                    <td>10.7</td>
+                    <td>4</td>
+                    <td><span class="badge badge-success">4.9x</span></td>
+                </tr>
+            </table>
+
+            <h3>共视点数分布对比</h3>
+            <div class="bar-chart">
+                <div class="bar-item">
+                    <span class="bar-label">选中像对</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 85%; background: linear-gradient(90deg, #22c55e, #16a34a);">
+                            平均 85.0 点 | 中位数 47 点
+                        </div>
+                    </div>
+                </div>
+                <div class="bar-item">
+                    <span class="bar-label">未选中像对</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 14%; background: linear-gradient(90deg, #94a3b8, #64748b);">
+                            13.9
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <strong>策略推断：</strong>优先选择共视点数较多的像对，确保两张图像有足够的公共特征进行稠密匹配。
+            </div>
+        </section>
+
+        <!-- 交会角分析 -->
+        <section id="convergence" class="card">
+            <h2>📏 交会角分析</h2>
+
+            <div class="highlight-box success">
+                <strong>关键发现：</strong>选中像对的交会角显著更小（4.2° vs 20.6°），表明算法优先选择 <strong>近似平行拍摄</strong> 的像对。
+            </div>
+
+            <h3>各数据集统计</h3>
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>选中平均</th>
+                    <th>选中中位数</th>
+                    <th>未选中平均</th>
+                    <th>差异</th>
+                </tr>
+                <tr>
+                    <td>数据集1</td>
+                    <td><strong>5.3°</strong></td>
+                    <td>2.1°</td>
+                    <td>20.1°</td>
+                    <td><span class="badge badge-success">-74%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集2</td>
+                    <td><strong>4.8°</strong></td>
+                    <td>2.5°</td>
+                    <td>21.9°</td>
+                    <td><span class="badge badge-success">-78%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集3</td>
+                    <td><strong>4.5°</strong></td>
+                    <td>1.8°</td>
+                    <td>21.6°</td>
+                    <td><span class="badge badge-success">-79%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集4</td>
+                    <td><strong>4.0°</strong></td>
+                    <td>1.9°</td>
+                    <td>20.5°</td>
+                    <td><span class="badge badge-success">-80%</span></td>
+                </tr>
+            </table>
+
+            <h3>交会角分布</h3>
+            <div class="bar-chart">
+                <div class="bar-item">
+                    <span class="bar-label">0-5°</span>
+                    <div class="bar-track">
+                        <div class="bar-compare">
+                            <div class="bar-fill selected" style="width: 70%;">选中 70%</div>
+                            <div class="bar-fill not-selected" style="width: 18%;">未选 18%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bar-item">
+                    <span class="bar-label">5-10°</span>
+                    <div class="bar-track">
+                        <div class="bar-compare">
+                            <div class="bar-fill selected" style="width: 15%;">15%</div>
+                            <div class="bar-fill not-selected" style="width: 12%;">12%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bar-item">
+                    <span class="bar-label">10-20°</span>
+                    <div class="bar-track">
+                        <div class="bar-compare">
+                            <div class="bar-fill selected" style="width: 8%;">8%</div>
+                            <div class="bar-fill not-selected" style="width: 20%;">20%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bar-item">
+                    <span class="bar-label">>20°</span>
+                    <div class="bar-track">
+                        <div class="bar-compare">
+                            <div class="bar-fill selected" style="width: 7%;">7%</div>
+                            <div class="bar-fill not-selected" style="width: 50%;">50%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="highlight-box warning">
+                <strong>原理说明：</strong>小交会角意味着两张照片从相似方向拍摄同一区域，这有利于：
+                <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                    <li>减少遮挡和透视变形</li>
+                    <li>提高特征匹配成功率</li>
+                    <li>获得更稳定的深度估计</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 分辨率分析 -->
+        <section id="resolution" class="card">
+            <h2>🔍 分辨率分析 (GSD比)</h2>
+
+            <p>通过照片的中值深度(MedianDepth)推算GSD比，反映两张照片的分辨率一致性。</p>
+
+            <h3>各数据集统计</h3>
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>选中平均</th>
+                    <th>选中中位数</th>
+                    <th>未选中平均</th>
+                    <th>差异</th>
+                </tr>
+                <tr>
+                    <td>数据集1</td>
+                    <td><strong>1.06</strong></td>
+                    <td>1.02</td>
+                    <td>1.17</td>
+                    <td><span class="badge badge-info">-9%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集2</td>
+                    <td><strong>1.05</strong></td>
+                    <td>1.02</td>
+                    <td>1.20</td>
+                    <td><span class="badge badge-info">-13%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集3</td>
+                    <td><strong>1.05</strong></td>
+                    <td>1.02</td>
+                    <td>1.20</td>
+                    <td><span class="badge badge-info">-13%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集4</td>
+                    <td><strong>1.04</strong></td>
+                    <td>1.02</td>
+                    <td>1.20</td>
+                    <td><span class="badge badge-info">-13%</span></td>
+                </tr>
+            </table>
+
+            <div class="grid" style="margin-top: 1rem;">
+                <div class="stat-card highlight">
+                    <div class="value">1.05</div>
+                    <div class="label">选中像对平均GSD比</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">1.20</div>
+                    <div class="label">未选中像对平均GSD比</div>
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <strong>策略推断：</strong>优先选择GSD比接近1的像对，确保两张图像的分辨率相近（差异<10%），有利于特征匹配和稠密匹配的一致性。
+            </div>
+        </section>
+
+        <!-- 方向向量分析 -->
+        <section id="direction" class="card">
+            <h2>🧭 方向向量分析</h2>
+
+            <p>方向相似度通过两张照片光轴的余弦值计算，1表示完全同向，0表示正交，-1表示反向。</p>
+
+            <h3>各数据集统计</h3>
+            <table>
+                <tr>
+                    <th>数据集</th>
+                    <th>选中平均</th>
+                    <th>选中中位数</th>
+                    <th>未选中平均</th>
+                    <th>差异</th>
+                </tr>
+                <tr>
+                    <td>数据集1</td>
+                    <td><strong>0.99</strong></td>
+                    <td>1.00</td>
+                    <td>0.88</td>
+                    <td><span class="badge badge-info">+13%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集2</td>
+                    <td><strong>0.99</strong></td>
+                    <td>1.00</td>
+                    <td>0.87</td>
+                    <td><span class="badge badge-info">+14%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集3</td>
+                    <td><strong>0.99</strong></td>
+                    <td>1.00</td>
+                    <td>0.87</td>
+                    <td><span class="badge badge-info">+14%</span></td>
+                </tr>
+                <tr>
+                    <td>数据集4</td>
+                    <td><strong>0.99</strong></td>
+                    <td>1.00</td>
+                    <td>0.88</td>
+                    <td><span class="badge badge-info">+13%</span></td>
+                </tr>
+            </table>
+
+            <div class="grid" style="margin-top: 1rem;">
+                <div class="stat-card highlight">
+                    <div class="value">0.99</div>
+                    <div class="label">选中像对 (接近同向)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">0.88</div>
+                    <div class="label">未选中像对</div>
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <strong>与交会角的关系：</strong>方向相似度和交会角高度相关。选中像对的方向相似度接近1（中位数=1.00），对应交会角接近0°，表明算法倾向于选择<strong>相机朝向相同</strong>的像对。
+            </div>
+        </section>
+
+        <!-- 算法推断 -->
+        <section id="algorithm" class="card">
+            <h2>⚙️ 算法流程推断</h2>
+
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="num">1</div>
+                    <div><strong>构建候选</strong></div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">有共视点的像对</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="num">2</div>
+                    <div><strong>计算评分</strong></div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">4因素加权</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="num">3</div>
+                    <div><strong>阈值过滤</strong></div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">剔除低质量对</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="num">4</div>
+                    <div><strong>Top-K选择</strong></div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">每照片选最优</div>
+                </div>
+            </div>
+
+            <h3>推断的评分函数</h3>
+            <code>
+Score(pair) = w1 × Overlap(pair)           // 重叠度 (共视点数, 权重最高)
+            + w2 × (1 - ConvergenceAngle/90°) // 交会角惩罚 (越小越好)
+            + w3 × (1 - |GSD_ratio - 1|)      // 分辨率一致性 (越接近1越好)
+            + w4 × DirectionSimilarity        // 方向相似度 (越接近1越好)
+
+其中: w1 > w2 > w3 ≈ w4
+
+选择策略:
+1. 对每张照片，选择评分最高的 k 个邻居 (k ≈ 4-5)
+2. 确保整体连通性
+3. 保持适度冗余
+            </code>
+
+            <h3>参数估计</h3>
+            <table>
+                <tr>
+                    <th>参数</th>
+                    <th>估计值</th>
+                    <th>依据</th>
+                </tr>
+                <tr>
+                    <td>每照片邻居数 k</td>
+                    <td>4-5</td>
+                    <td>平均邻居数约4.25</td>
+                </tr>
+                <tr>
+                    <td>交会角偏好</td>
+                    <td>< 10°</td>
+                    <td>中位数约2°, 75%分位约6°</td>
+                </tr>
+                <tr>
+                    <td>GSD比偏好</td>
+                    <td>< 1.1</td>
+                    <td>中位数1.02, 75%分位1.06</td>
+                </tr>
+                <tr>
+                    <td>方向相似度偏好</td>
+                    <td>> 0.98</td>
+                    <td>中位数1.00, 25%分位0.99</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- 结论 -->
+        <section id="conclusion" class="card">
+            <h2>📝 结论</h2>
+
+            <div class="highlight-box success">
+                <h3 style="margin-top:0;">策略定性</h3>
+                <p>该像对选择策略是一种<strong>基于多因素评分的稀疏化策略</strong>，综合考虑重叠度、交会角、分辨率和方向向量四个因素，不依赖空间距离和架次信息。</p>
+            </div>
+
+            <h3>四大因素重要性排序</h3>
+            <ol style="padding-left: 1.5rem; line-height: 2.2;">
+                <li><strong style="color: var(--success);">重叠度 (最重要)</strong>：选中像对共视点数是未选中的6倍，这是区分度最大的因素</li>
+                <li><strong style="color: var(--primary);">交会角 (非常重要)</strong>：选中像对平均4.2°，未选中20.6°，差异达80%</li>
+                <li><strong style="color: var(--warning);">分辨率比 (较重要)</strong>：选中像对GSD比更接近1，差异约13%</li>
+                <li><strong style="color: var(--secondary);">方向相似度 (较重要)</strong>：选中像对方向余弦0.99，差异约13%</li>
+            </ol>
+
+            <h3>策略特点</h3>
+            <div class="grid">
+                <div class="highlight-box">
+                    <strong>✓ 高效稀疏</strong><br>
+                    仅选择3.5%的候选像对，大幅减少计算量
+                </div>
+                <div class="highlight-box">
+                    <strong>✓ 质量优先</strong><br>
+                    优先选择高重叠、小交会角、同分辨率的像对
+                </div>
+                <div class="highlight-box warning">
+                    <strong>✓ 同向拍摄</strong><br>
+                    倾向于选择相机朝向相同的像对，减少遮挡
+                </div>
+                <div class="highlight-box success">
+                    <strong>✓ 一致性好</strong><br>
+                    4个数据集呈现高度一致的选择模式
+                </div>
+            </div>
+
+            <h3>应用场景</h3>
+            <p>该策略特别适用于：</p>
+            <ul style="padding-left: 1.5rem; line-height: 1.8;">
+                <li>倾斜摄影测量的稠密匹配阶段</li>
+                <li>大规模城市三维重建</li>
+                <li>需要高效率的自动化生产流程</li>
+                <li>对匹配精度要求较高的场景</li>
+            </ul>
+        </section>
+    </div>
+
+    <footer>
+        <p>本报告通过对4个空三成果数据集的逆向工程分析生成</p>
+        <p>主要考虑因素：重叠度、交会角、分辨率、方向向量</p>
+    </footer>
+
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>
