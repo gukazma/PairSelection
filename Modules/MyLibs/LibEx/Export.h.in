@@ -1,0 +1,14 @@
+#pragma once
+#ifdef WIN32
+#ifdef @TARGET_NAME@_DLL_LIB
+    #ifdef @TARGET_NAME@_DLL_LIB_EXPORT
+        #define @TARGET_NAME@_API _declspec(dllexport)
+    #else
+        #define @TARGET_NAME@_API _declspec(dllimport)
+    #endif
+#else
+    #define @TARGET_NAME@_API
+#endif
+#else
+    #define @TARGET_NAME@_API
+#endif
