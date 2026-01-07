@@ -479,7 +479,7 @@ class TrianglePairSelector {
     }
 
     void selectPairsHybrid() {
-        std::cout << "  Mutual Top-K + Geometric Clustering v30.0..." << std::endl;
+        std::cout << "  Mutual Top-K v30.13 - Optimized baseline..." << std::endl;
 
         int numImages = (int)photos_->size();
         int targetTriplets = (int)std::ceil(numImages * 0.63);
@@ -517,6 +517,7 @@ class TrianglePairSelector {
             int maxRank;       // Maximum rank among all 6
             int mutualTopK;    // How many edges are mutual top-K (both ranks < K)
             double geometricScore;  // Average geometric quality
+            int idSpan;        // max(id) - min(id) for bridge detection
         };
 
         std::vector<TripletWithRanks> candidateTriplets;
@@ -573,6 +574,9 @@ class TrianglePairSelector {
                 double gs3 = pairScore_.count(e3) ? pairScore_[e3] : 0;
                 double geometricScore = (gs1 + gs2 + gs3) / 3.0;
 
+                // Calculate ID span for bridge detection
+                int idSpan = tri.id3 - tri.id1;  // id3 is max, id1 is min (sorted)
+
                 TripletWithRanks twr;
                 twr.tri = tri;
                 twr.tri.quality = minCovis;
@@ -582,6 +586,7 @@ class TrianglePairSelector {
                 twr.maxRank = maxRank;
                 twr.mutualTopK = mutualTopK;
                 twr.geometricScore = geometricScore;
+                twr.idSpan = idSpan;
 
                 candidateTriplets.push_back(twr);
             }
@@ -589,16 +594,7 @@ class TrianglePairSelector {
 
         std::cout << "    Candidate triplets: " << candidateTriplets.size() << std::endl;
 
-        // Step 3: Multi-tier selection based on mutual rank agreement
-        // Tier 1: All 3 edges are mutual top-K (strongest agreement)
-        // Tier 2: 2 edges are mutual top-K
-        // Tier 3: 1 edge is mutual top-K
-        // Tier 4: Best by geometric score
-
-        std::cout << "    Selecting by mutual rank tiers..." << std::endl;
-
-        // v30.12: Best approach restored - simple greedy by (mutualTopK, sumRanks)
-        // This achieved F1 72.95% which is the best so far
+        // Step 3: v30.12 best approach - simple greedy by (mutualTopK, sumRanks)
         std::set<int> coveredImages;
         std::set<std::pair<int, int>> coveredEdges;
         std::map<int, int> imageAppearances;
@@ -653,22 +649,13 @@ class TrianglePairSelector {
         std::cout << "    Images covered: " << coveredImages.size() << "/" << numImages << std::endl;
         std::cout << "    Covered edges: " << coveredEdges.size() << std::endl;
 
-        // Analyze selected triplets by tier
-        int sel_t1 = 0, sel_t2 = 0, sel_t3 = 0, sel_t4 = 0;
+        // Analyze selected triplets
+        int finalBridges = 0;
         for (const auto& tri : result_.triplets) {
-            // Find this triplet in candidates to get its tier
-            for (const auto& twr : candidateTriplets) {
-                if (twr.tri == tri) {
-                    if (twr.mutualTopK == 3) sel_t1++;
-                    else if (twr.mutualTopK == 2) sel_t2++;
-                    else if (twr.mutualTopK == 1) sel_t3++;
-                    else sel_t4++;
-                    break;
-                }
-            }
+            int span = tri.id3 - tri.id1;
+            if (span > 300) finalBridges++;
         }
-        std::cout << "    Selected by tier: T1=" << sel_t1 << " T2=" << sel_t2
-                  << " T3=" << sel_t3 << " T4=" << sel_t4 << std::endl;
+        std::cout << "    Final bridge count (span>300): " << finalBridges << std::endl;
 
         // Step 4: Dense pairs = ALL triplet edges (v30.10: include all edges for better recall)
         std::set<std::pair<int, int>> denseSet = coveredEdges;  // Start with all triplet edges
