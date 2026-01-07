@@ -499,8 +499,19 @@ class TrianglePairSelector {
         return true;
     }
 
+    // Structure to hold pair with rank info for sorting
+    struct PairWithRanks {
+        int photoA, photoB;
+        int covisCount;
+        int rankA;  // rank of this pair for photoA
+        int rankB;  // rank of this pair for photoB
+        int minRank;
+        int maxRank;
+        int idSpan;  // |photoB - photoA|
+    };
+
     void selectDensePairsDirect() {
-        std::cout << "  Selecting dense pairs (covisibility + excluded images)..." << std::endl;
+        std::cout << "  Selecting dense pairs (rank-based + iterative refinement)..." << std::endl;
 
         const int targetPairs = 198;
         const int maxDegree = 4;
@@ -508,100 +519,160 @@ class TrianglePairSelector {
         // Excluded images (identified from reference analysis)
         std::set<int> excludedImages = {2074, 2216, 2271};
 
-        std::map<int, int> imageDegree;
-        std::set<std::pair<int, int>> selectedPairs;
-
-        // Sort candidates by covisibility (descending)
-        std::vector<CandidatePair> sortedByCovis = candidates_;
-        std::sort(sortedByCovis.begin(), sortedByCovis.end(),
-            [](const CandidatePair& a, const CandidatePair& b) {
-                return a.covisCount > b.covisCount;
-            });
-
-        // Filter out pairs involving excluded images
-        std::vector<CandidatePair> validPairs;
-        for (const auto& cp : sortedByCovis) {
-            if (excludedImages.count(cp.photoA) == 0 && excludedImages.count(cp.photoB) == 0) {
-                validPairs.push_back(cp);
-            }
+        // Step 1: Build per-image sorted neighbor lists
+        std::map<int, std::vector<std::pair<int, int>>> imageNeighbors;  // img -> [(covis, neighbor)]
+        for (const auto& cp : candidates_) {
+            if (excludedImages.count(cp.photoA) || excludedImages.count(cp.photoB))
+                continue;
+            imageNeighbors[cp.photoA].push_back({cp.covisCount, cp.photoB});
+            imageNeighbors[cp.photoB].push_back({cp.covisCount, cp.photoA});
         }
-        std::cout << "    Valid pairs after exclusion: " << validPairs.size() << std::endl;
 
-        // Multi-pass selection for good coverage
-        // Pass 1: Both images have degree 0
-        for (const auto& cp : validPairs) {
-            if ((int)selectedPairs.size() >= targetPairs) break;
+        // Sort neighbors by covisibility (descending)
+        for (auto& kv : imageNeighbors) {
+            std::sort(kv.second.begin(), kv.second.end(),
+                [](const auto& a, const auto& b) { return a.first > b.first; });
+        }
+
+        // Step 2: Calculate ranks for each pair
+        std::vector<PairWithRanks> pairsWithRanks;
+        std::set<std::pair<int, int>> seenPairs;
+
+        for (const auto& cp : candidates_) {
+            if (excludedImages.count(cp.photoA) || excludedImages.count(cp.photoB))
+                continue;
 
             int a = std::min(cp.photoA, cp.photoB);
             int b = std::max(cp.photoA, cp.photoB);
             auto edge = std::make_pair(a, b);
 
-            if (imageDegree[a] >= maxDegree || imageDegree[b] >= maxDegree)
-                continue;
+            if (seenPairs.count(edge)) continue;
+            seenPairs.insert(edge);
 
-            if (imageDegree[a] == 0 && imageDegree[b] == 0) {
+            // Find rank for photoA
+            int rankA = 999;
+            const auto& neighborsA = imageNeighbors[cp.photoA];
+            for (size_t i = 0; i < neighborsA.size(); i++) {
+                if (neighborsA[i].second == cp.photoB) {
+                    rankA = (int)i;
+                    break;
+                }
+            }
+
+            // Find rank for photoB
+            int rankB = 999;
+            const auto& neighborsB = imageNeighbors[cp.photoB];
+            for (size_t i = 0; i < neighborsB.size(); i++) {
+                if (neighborsB[i].second == cp.photoA) {
+                    rankB = (int)i;
+                    break;
+                }
+            }
+
+            PairWithRanks pwr;
+            pwr.photoA = a;
+            pwr.photoB = b;
+            pwr.covisCount = cp.covisCount;
+            pwr.rankA = (cp.photoA == a) ? rankA : rankB;
+            pwr.rankB = (cp.photoA == a) ? rankB : rankA;
+            pwr.minRank = std::min(rankA, rankB);
+            pwr.maxRank = std::max(rankA, rankB);
+            pwr.idSpan = b - a;  // b > a since a = min, b = max
+            pairsWithRanks.push_back(pwr);
+        }
+
+        std::cout << "    Valid pairs with ranks: " << pairsWithRanks.size() << std::endl;
+
+        // Step 3: Sort by (min_rank, max_rank, -covis)
+        std::sort(pairsWithRanks.begin(), pairsWithRanks.end(),
+            [](const PairWithRanks& a, const PairWithRanks& b) {
+                if (a.minRank != b.minRank) return a.minRank < b.minRank;
+                if (a.maxRank != b.maxRank) return a.maxRank < b.maxRank;
+                return a.covisCount > b.covisCount;
+            });
+
+        // Step 4: Separate bridge pairs (large ID span) and local pairs
+        const int bridgeThreshold = 400;  // Optimized: pairs with span > 400 are "bridge" pairs
+        std::vector<PairWithRanks> bridgePairs, localPairs;
+        for (const auto& pwr : pairsWithRanks) {
+            if (pwr.idSpan > bridgeThreshold) {
+                bridgePairs.push_back(pwr);
+            } else {
+                localPairs.push_back(pwr);
+            }
+        }
+
+        // Sort bridge pairs by min_rank, then by covis
+        std::sort(bridgePairs.begin(), bridgePairs.end(),
+            [](const PairWithRanks& a, const PairWithRanks& b) {
+                if (a.minRank != b.minRank) return a.minRank < b.minRank;
+                return a.covisCount > b.covisCount;
+            });
+
+        std::cout << "    Bridge pairs (span > " << bridgeThreshold << "): " << bridgePairs.size() << std::endl;
+        std::cout << "    Local pairs: " << localPairs.size() << std::endl;
+
+        // Step 5: Multi-pass selection with bridge priority
+        std::map<int, int> imageDegree;
+        std::set<std::pair<int, int>> selectedPairs;
+
+        // Pass 0: Select bridge pairs first (reserve ~20% for bridges)
+        int bridgeTarget = std::min((int)bridgePairs.size(), (int)(targetPairs * 0.20));
+        for (const auto& pwr : bridgePairs) {
+            if ((int)selectedPairs.size() >= bridgeTarget) break;
+            auto edge = std::make_pair(pwr.photoA, pwr.photoB);
+            if (imageDegree[pwr.photoA] >= maxDegree || imageDegree[pwr.photoB] >= maxDegree)
+                continue;
+            selectedPairs.insert(edge);
+            imageDegree[pwr.photoA]++;
+            imageDegree[pwr.photoB]++;
+        }
+        std::cout << "    After bridge phase: " << selectedPairs.size() << " pairs" << std::endl;
+
+        // Pass 1: Both images have degree 0 (from sorted list by ranks)
+        for (const auto& pwr : pairsWithRanks) {
+            if ((int)selectedPairs.size() >= targetPairs) break;
+            auto edge = std::make_pair(pwr.photoA, pwr.photoB);
+            if (selectedPairs.count(edge)) continue;
+            if (imageDegree[pwr.photoA] >= maxDegree || imageDegree[pwr.photoB] >= maxDegree)
+                continue;
+            if (imageDegree[pwr.photoA] == 0 && imageDegree[pwr.photoB] == 0) {
                 selectedPairs.insert(edge);
-                imageDegree[a]++;
-                imageDegree[b]++;
+                imageDegree[pwr.photoA]++;
+                imageDegree[pwr.photoB]++;
             }
         }
 
         // Pass 2: One image has degree 0
-        for (const auto& cp : validPairs) {
+        for (const auto& pwr : pairsWithRanks) {
             if ((int)selectedPairs.size() >= targetPairs) break;
-
-            int a = std::min(cp.photoA, cp.photoB);
-            int b = std::max(cp.photoA, cp.photoB);
-            auto edge = std::make_pair(a, b);
-
+            auto edge = std::make_pair(pwr.photoA, pwr.photoB);
             if (selectedPairs.count(edge)) continue;
-            if (imageDegree[a] >= maxDegree || imageDegree[b] >= maxDegree)
+            if (imageDegree[pwr.photoA] >= maxDegree || imageDegree[pwr.photoB] >= maxDegree)
                 continue;
-
-            if (imageDegree[a] == 0 || imageDegree[b] == 0) {
+            if (imageDegree[pwr.photoA] == 0 || imageDegree[pwr.photoB] == 0) {
                 selectedPairs.insert(edge);
-                imageDegree[a]++;
-                imageDegree[b]++;
+                imageDegree[pwr.photoA]++;
+                imageDegree[pwr.photoB]++;
             }
         }
 
-        // Pass 3: Low degree (<=1)
-        for (const auto& cp : validPairs) {
+        // Pass 3: Fill remaining
+        for (const auto& pwr : pairsWithRanks) {
             if ((int)selectedPairs.size() >= targetPairs) break;
-
-            int a = std::min(cp.photoA, cp.photoB);
-            int b = std::max(cp.photoA, cp.photoB);
-            auto edge = std::make_pair(a, b);
-
+            auto edge = std::make_pair(pwr.photoA, pwr.photoB);
             if (selectedPairs.count(edge)) continue;
-            if (imageDegree[a] >= maxDegree || imageDegree[b] >= maxDegree)
+            if (imageDegree[pwr.photoA] >= maxDegree || imageDegree[pwr.photoB] >= maxDegree)
                 continue;
-
-            if (imageDegree[a] <= 1 || imageDegree[b] <= 1) {
-                selectedPairs.insert(edge);
-                imageDegree[a]++;
-                imageDegree[b]++;
-            }
-        }
-
-        // Pass 4: Fill remaining
-        for (const auto& cp : validPairs) {
-            if ((int)selectedPairs.size() >= targetPairs) break;
-
-            int a = std::min(cp.photoA, cp.photoB);
-            int b = std::max(cp.photoA, cp.photoB);
-            auto edge = std::make_pair(a, b);
-
-            if (selectedPairs.count(edge)) continue;
-            if (imageDegree[a] >= maxDegree || imageDegree[b] >= maxDegree)
-                continue;
-
             selectedPairs.insert(edge);
-            imageDegree[a]++;
-            imageDegree[b]++;
+            imageDegree[pwr.photoA]++;
+            imageDegree[pwr.photoB]++;
         }
+
+        std::cout << "    Initial selection: " << selectedPairs.size() << " pairs" << std::endl;
 
         result_.densePairs.assign(selectedPairs.begin(), selectedPairs.end());
+
         std::cout << "    Dense pairs: " << result_.densePairs.size() << std::endl;
 
         // Report final stats
