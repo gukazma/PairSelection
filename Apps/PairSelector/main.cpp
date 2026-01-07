@@ -479,7 +479,7 @@ class TrianglePairSelector {
     }
 
     void selectPairsHybrid() {
-        std::cout << "  Mutual Top-K v30.13 - Optimized baseline..." << std::endl;
+        std::cout << "  Anchored Bridge Selection v33.0..." << std::endl;
 
         int numImages = (int)photos_->size();
         int targetTriplets = (int)std::ceil(numImages * 0.63);
@@ -594,38 +594,124 @@ class TrianglePairSelector {
 
         std::cout << "    Candidate triplets: " << candidateTriplets.size() << std::endl;
 
-        // Step 3: v30.12 best approach - simple greedy by (mutualTopK, sumRanks)
+        // Step 3: v33.0 - Anchored Bridge Selection
+        // Key insight: Reference bridges (span>300) have pattern: 89% have minGap <=100
+        // "Anchored bridge" = one small gap (<100) + one large gap (>100)
         std::set<int> coveredImages;
         std::set<std::pair<int, int>> coveredEdges;
         std::map<int, int> imageAppearances;
         int maxAppearances = (numImages > 1000) ? 4 : 3;
 
-        // Sort by tier, then by sumRanks (best predictor found empirically)
-        std::sort(candidateTriplets.begin(), candidateTriplets.end(),
+        // Classify triplets
+        std::vector<TripletWithRanks> mutualTopK_triplets;  // Strong: mutualTopK >= 2
+        std::vector<TripletWithRanks> anchoredBridge_triplets;  // Anchored bridges: span>300 && minGap<100
+        std::vector<TripletWithRanks> other_triplets;
+
+        for (const auto& twr : candidateTriplets) {
+            int gap1 = twr.tri.id2 - twr.tri.id1;
+            int gap2 = twr.tri.id3 - twr.tri.id2;
+            int minGap = std::min(gap1, gap2);
+            int span = twr.idSpan;
+
+            if (twr.mutualTopK >= 2) {
+                // Strong triplets with good mutual ranks
+                mutualTopK_triplets.push_back(twr);
+            } else if (span > 300 && minGap <= 100 && twr.minCovis >= 30) {
+                // Anchored bridge: large span but has anchor (small gap)
+                anchoredBridge_triplets.push_back(twr);
+            } else {
+                other_triplets.push_back(twr);
+            }
+        }
+
+        // Sort each category
+        auto rankComparator = [](const TripletWithRanks& a, const TripletWithRanks& b) {
+            if (a.mutualTopK != b.mutualTopK) return a.mutualTopK > b.mutualTopK;
+            if (a.sumRanks != b.sumRanks) return a.sumRanks < b.sumRanks;
+            return a.minCovis > b.minCovis;
+        };
+
+        std::sort(mutualTopK_triplets.begin(), mutualTopK_triplets.end(), rankComparator);
+
+        // For anchored bridges: prioritize better anchor (smaller minGap) + better covis
+        std::sort(anchoredBridge_triplets.begin(), anchoredBridge_triplets.end(),
             [](const TripletWithRanks& a, const TripletWithRanks& b) {
-                if (a.mutualTopK != b.mutualTopK) return a.mutualTopK > b.mutualTopK;
-                if (a.sumRanks != b.sumRanks) return a.sumRanks < b.sumRanks;
+                int gap_a = std::min(a.tri.id2 - a.tri.id1, a.tri.id3 - a.tri.id2);
+                int gap_b = std::min(b.tri.id2 - b.tri.id1, b.tri.id3 - b.tri.id2);
+                if (gap_a != gap_b) return gap_a < gap_b;  // Smaller anchor gap is better
                 return a.minCovis > b.minCovis;
             });
 
-        // Analyze tier distribution
-        int tier1 = 0, tier2 = 0, tier3 = 0, tier4 = 0;
-        for (const auto& twr : candidateTriplets) {
-            if (twr.mutualTopK == 3) tier1++;
-            else if (twr.mutualTopK == 2) tier2++;
-            else if (twr.mutualTopK == 1) tier3++;
-            else tier4++;
-        }
-        std::cout << "    Tier distribution: T1=" << tier1 << " T2=" << tier2
-                  << " T3=" << tier3 << " T4=" << tier4 << std::endl;
+        std::sort(other_triplets.begin(), other_triplets.end(), rankComparator);
 
-        // Simple greedy selection (best F1 72.95%)
-        for (const auto& twr : candidateTriplets) {
+        std::cout << "    Classified: MutualTopK=" << mutualTopK_triplets.size()
+                  << ", AnchoredBridges=" << anchoredBridge_triplets.size()
+                  << ", Others=" << other_triplets.size() << std::endl;
+
+        // Phase 1: Select from strong mutualTopK triplets (70%)
+        int phase1Target = (int)(targetTriplets * 0.70);
+        for (const auto& twr : mutualTopK_triplets) {
+            if ((int)result_.triplets.size() >= phase1Target) break;
+
+            const auto& tri = twr.tri;
+            if (imageAppearances[tri.id1] >= maxAppearances ||
+                imageAppearances[tri.id2] >= maxAppearances ||
+                imageAppearances[tri.id3] >= maxAppearances) {
+                continue;
+            }
+
+            result_.triplets.push_back(tri);
+            coveredImages.insert(tri.id1);
+            coveredImages.insert(tri.id2);
+            coveredImages.insert(tri.id3);
+            imageAppearances[tri.id1]++;
+            imageAppearances[tri.id2]++;
+            imageAppearances[tri.id3]++;
+
+            for (const auto& e : tri.getEdges()) {
+                coveredEdges.insert(e);
+            }
+        }
+
+        std::cout << "    Phase 1 (MutualTopK): " << result_.triplets.size() << " triplets" << std::endl;
+
+        // Phase 2: Add anchored bridges (target ~30% = ~33 for 111 triplets)
+        int phase2Start = (int)result_.triplets.size();
+        int bridgeTarget = targetTriplets - phase1Target;
+
+        for (const auto& twr : anchoredBridge_triplets) {
+            if ((int)result_.triplets.size() >= targetTriplets) break;
+            if ((int)result_.triplets.size() - phase2Start >= bridgeTarget) break;
+
+            const auto& tri = twr.tri;
+            // Relaxed constraint for bridges
+            int bridgeMaxApp = maxAppearances + 1;
+            if (imageAppearances[tri.id1] >= bridgeMaxApp ||
+                imageAppearances[tri.id2] >= bridgeMaxApp ||
+                imageAppearances[tri.id3] >= bridgeMaxApp) {
+                continue;
+            }
+
+            result_.triplets.push_back(tri);
+            coveredImages.insert(tri.id1);
+            coveredImages.insert(tri.id2);
+            coveredImages.insert(tri.id3);
+            imageAppearances[tri.id1]++;
+            imageAppearances[tri.id2]++;
+            imageAppearances[tri.id3]++;
+
+            for (const auto& e : tri.getEdges()) {
+                coveredEdges.insert(e);
+            }
+        }
+
+        std::cout << "    Phase 2 (Bridges): " << (result_.triplets.size() - phase2Start) << " bridges added" << std::endl;
+
+        // Phase 3: Fill remaining with others if needed
+        for (const auto& twr : other_triplets) {
             if ((int)result_.triplets.size() >= targetTriplets) break;
 
             const auto& tri = twr.tri;
-
-            // Check appearance constraint
             if (imageAppearances[tri.id1] >= maxAppearances ||
                 imageAppearances[tri.id2] >= maxAppearances ||
                 imageAppearances[tri.id3] >= maxAppearances) {
