@@ -1,271 +1,280 @@
-# 像对选择算法实现计划
+# 像对选择算法研发方案 v2.0
 
-## 项目目标
+## 1. 问题分析
 
-基于逆向工程分析结果，用C++实现像对选择算法，输入空三成果XML，输出pairs.txt。
+### 1.1 参考输出结构
 
----
-
-## 一、核心算法设计
-
-### 1.1 算法流程图
+参考 `pairs.txt` 包含三个独立区段：
 
 ```
-┌─────────────────┐
-│  解析XML文件    │
-│  - 照片位姿     │
-│  - 连接点共视   │
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│  构建候选像对   │
-│  - 共视点数>0   │
-│  - 计算四因素   │
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│  综合评分       │
-│  Score = f(O,A,G,D)│
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│  智能选择       │
-│  - Top-K初选    │
-│  - 冗余检测     │
-│  - 三角形保证   │
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│  输出pairs.txt  │
-└─────────────────┘
+#Graph of Views
+#Version 2
+[count1]          ← 第一区段: 密集匹配对数量
+id1 id2           ← 密集匹配像对 (Dense Matching Pairs)
+...
+[count2]          ← 第二区段: Refine对数量
+id1 id2           ← Refine像对 (Refinement Pairs)
+...
+[count3]          ← 第三区段: 三角形数量
+id1 id2 id3       ← 三角形约束 (Triplet Constraints)
+...
 ```
 
-### 1.2 评分函数设计
+### 1.2 关键发现
 
-基于分析结果，评分函数如下：
+| 特性 | 观察结果 |
+|------|----------|
+| 区段1 ⊂ 区段3 | 密集匹配对100%包含在三角形展开边中 |
+| 区段1 ∩ 区段2 | ~85-92%重叠 |
+| 三角形核心 | 三角形是整个策略的核心，边从三角形导出 |
+| 冗余比 | 三角形展开后约1.8-2.0x MST |
+
+### 1.3 各区段统计 (参考数据)
+
+| 数据集 | 照片数 | 区段1 (密集) | 区段2 (Refine) | 区段3 (三角形) | 三角形展开 |
+|--------|--------|-------------|---------------|---------------|-----------|
+| 1 | 175 | 198 | 198 | 111 | 309 |
+| 2 | 340 | 393 | 400 | 223 | 616 |
+| 3 | 300 | 359 | 361 | 205 | 561 |
+| 4 | 3425 | 4226 | 4341 | 2353 | 6479 |
+
+### 1.4 当前算法问题
+
+- 只输出单一像对列表，没有三段结构
+- 没有显式三角形约束输出
+- 无法区分密集匹配和Refine用途
+- F1约73%，但召回率不高
+
+## 2. 新算法设计
+
+### 2.1 核心思路
+
+**三角形优先策略**: 先选择高质量三角形，再从三角形边中导出密集匹配对。
+
+```
+候选像对 → 构建候选三角形 → 选择优质三角形 → 导出密集对 → 生成Refine对
+```
+
+### 2.2 算法流程
+
+```
+Phase 1: 数据准备
+├── 解析XML获取照片位姿和共视信息
+├── 构建候选像对并计算质量评分
+└── 建立邻接表用于三角形搜索
+
+Phase 2: 三角形发现与选择
+├── 对每对候选像对(i,j)搜索公共邻居k
+├── 评估三角形(i,j,k)质量
+├── 按质量排序所有候选三角形
+└── 贪心选择三角形直到达到目标数量
+
+Phase 3: 密集匹配对生成 (区段1)
+├── 从选中的三角形提取所有边
+├── 选择高质量子集作为密集匹配对
+└── 确保每个照片有足够邻居
+
+Phase 4: Refine对生成 (区段2)
+├── 以密集匹配对为基础
+├── 添加部分高共视但未被选中的边
+└── 确保全局连通性和BA优化需求
+
+Phase 5: 三段式输出
+├── 区段1: 密集匹配对
+├── 区段2: Refine对
+└── 区段3: 三角形约束
+```
+
+### 2.3 三角形质量评估
 
 ```cpp
-double calculateScore(const PairFeatures& pair) {
-    // 权重分配 (基于因素重要性排序)
-    const double w_overlap = 0.50;    // 重叠度 - 最重要
-    const double w_angle = 0.30;      // 交会角 - 非常重要
-    const double w_gsd = 0.10;        // GSD比 - 较重要
-    const double w_dir = 0.10;        // 方向相似度 - 较重要
+double evaluateTriangle(int i, int j, int k) {
+    // 1. 三边共视度
+    int covis_ij = getCovis(i, j);
+    int covis_jk = getCovis(j, k);
+    int covis_ik = getCovis(i, k);
+    int minCovis = min({covis_ij, covis_jk, covis_ik});
 
-    // 归一化处理
-    double overlap_score = normalize_overlap(pair.covisCount);
-    double angle_score = 1.0 - std::min(pair.convergenceAngle / 30.0, 1.0);
-    double gsd_score = 1.0 - std::min(std::abs(pair.gsdRatio - 1.0) / 0.5, 1.0);
-    double dir_score = pair.directionSimilarity;
+    // 2. 弱边检查 - 任一边太弱则放弃
+    if (minCovis < MIN_COVIS_THRESHOLD) return 0;
 
-    return w_overlap * overlap_score +
-           w_angle * angle_score +
-           w_gsd * gsd_score +
-           w_dir * dir_score;
+    // 3. 角度分布 (避免退化三角形)
+    double angle_ij = getAngle(i, j);
+    double angle_jk = getAngle(j, k);
+    double angle_ik = getAngle(i, k);
+    double meanAngle = (angle_ij + angle_jk + angle_ik) / 3.0;
+
+    // 4. 综合评分
+    double covisScore = (double)minCovis / MAX_COVIS;
+    double angleScore = 1.0 - min(meanAngle / 45.0, 1.0);
+
+    return 0.8 * covisScore + 0.2 * angleScore;
 }
 ```
 
-### 1.3 创新点实现
-
-| 创新点 | 实现方法 |
-|--------|---------|
-| 智能冗余避免 | BFS检测2-hop连通性 |
-| 非严格Top-K | 综合评分后按分数排序选择 |
-| 三角形闭合 | 检查共同邻居数，优先保留能形成三角形的边 |
-| 精确冗余控制 | 目标边数 ≈ 2 × (节点数-1) |
-| 二级排序 | 同分数时优先选择小交会角 |
-
----
-
-## 二、数据结构设计
-
-### 2.1 核心数据结构
+### 2.4 密集对选择策略
 
 ```cpp
-// 照片信息
-struct Photo {
-    int id;
-    double center[3];           // 相机中心坐标
-    double rotation[9];         // 旋转矩阵 (M_00..M_22)
-    double medianDepth;         // 中值深度
-    int photogroup;             // 所属照片组
-};
+// 从三角形边中选择密集匹配对
+std::set<Edge> selectDensePairs(const std::vector<Triplet>& triplets) {
+    // 1. 收集所有三角形边及其出现次数
+    std::map<Edge, int> edgeCount;
+    std::map<Edge, double> edgeScore;
 
-// 候选像对
-struct CandidatePair {
-    int photoA, photoB;
-    int covisCount;             // 共视点数 (重叠度)
-    double convergenceAngle;    // 交会角
-    double gsdRatio;            // GSD比
-    double directionSimilarity; // 方向相似度
-    double score;               // 综合评分
-};
+    for (auto& tri : triplets) {
+        for (auto& edge : tri.getEdges()) {
+            edgeCount[edge]++;
+            edgeScore[edge] = max(edgeScore[edge],
+                                  getEdgeScore(edge.first, edge.second));
+        }
+    }
 
-// 图结构 (用于冗余检测)
-class PairGraph {
-    std::unordered_map<int, std::vector<int>> adjacency;
+    // 2. 优先选择出现在多个三角形中的边
+    std::vector<Edge> sortedEdges;
+    for (auto& [edge, count] : edgeCount) {
+        sortedEdges.push_back(edge);
+    }
 
-    bool is2HopConnected(int a, int b);
-    int countCommonNeighbors(int a, int b);
-    void addEdge(int a, int b);
-};
+    // 按(出现次数, 评分)排序
+    sort(sortedEdges.begin(), sortedEdges.end(),
+         [&](const Edge& a, const Edge& b) {
+             if (edgeCount[a] != edgeCount[b])
+                 return edgeCount[a] > edgeCount[b];
+             return edgeScore[a] > edgeScore[b];
+         });
+
+    // 3. 选择目标数量的边
+    std::set<Edge> densePairs;
+    int targetCount = (int)(triplets.size() * 1.8);  // 约为三角形数×1.8
+
+    for (auto& edge : sortedEdges) {
+        if (densePairs.size() >= targetCount) break;
+        densePairs.insert(edge);
+    }
+
+    return densePairs;
+}
 ```
 
-### 2.2 XML解析模块
+### 2.5 目标参数
+
+| 参数 | 目标值 | 说明 |
+|------|--------|------|
+| 三角形/照片比 | ~0.63-0.69 | 每个照片约参与0.6-0.7个三角形 |
+| 密集对/三角形比 | ~1.8 | 密集对约为三角形数×1.8 |
+| Refine/Dense比 | ~1.0-1.02 | Refine略多或相等 |
+| 密集对覆盖率 | >95% | 密集对应被三角形覆盖 |
+
+## 3. 数据结构设计
 
 ```cpp
-class XMLParser {
-public:
-    bool parse(const std::string& xmlPath);
+// 三角形结构
+struct Triplet {
+    int id1, id2, id3;  // 顶点ID (已排序: id1 < id2 < id3)
+    double quality;      // 三角形质量
 
-    const std::map<int, Photo>& getPhotos() const;
-    const std::map<std::pair<int,int>, int>& getCovisibility() const;
+    // 获取三条边
+    std::vector<std::pair<int,int>> getEdges() const {
+        return {{id1, id2}, {id1, id3}, {id2, id3}};
+    }
 
-private:
-    void parsePhoto(const std::string& block);
-    void parseTiePoint(const std::string& block);
+    // 用于去重的比较
+    bool operator<(const Triplet& other) const {
+        if (id1 != other.id1) return id1 < other.id1;
+        if (id2 != other.id2) return id2 < other.id2;
+        return id3 < other.id3;
+    }
+};
+
+// 选择结果
+struct PairSelectionResult {
+    std::vector<std::pair<int,int>> densePairs;   // 区段1: 密集匹配
+    std::vector<std::pair<int,int>> refinePairs;  // 区段2: Refine
+    std::vector<Triplet> triplets;                // 区段3: 三角形
 };
 ```
 
----
-
-## 三、实现步骤
-
-### Step 1: XML解析器 (xml_parser.h/cpp)
-- [ ] 解析Photo节点提取位姿信息
-- [ ] 解析TiePoint节点统计共视关系
-- [ ] 处理大文件（流式解析，避免全量加载）
-
-### Step 2: 特征计算模块 (pair_features.h/cpp)
-- [ ] 计算光轴方向 (从旋转矩阵)
-- [ ] 计算交会角 (两光轴夹角)
-- [ ] 计算GSD比 (通过中值深度)
-- [ ] 计算方向相似度 (光轴余弦)
-
-### Step 3: 评分与选择模块 (pair_selector.h/cpp)
-- [ ] 综合评分函数
-- [ ] Top-K初选
-- [ ] 冗余检测 (BFS 2-hop)
-- [ ] 三角形保证逻辑
-- [ ] 最终选择
-
-### Step 4: 输出模块 (output_writer.h/cpp)
-- [ ] 生成pairs.txt格式
-- [ ] 支持二列和三列格式
-
-### Step 5: 测试验证
-- [ ] 对4个数据集运行
-- [ ] 与原始pairs.txt对比
-- [ ] 统计匹配率和差异分析
-
----
-
-## 四、项目结构
-
-```
-PairSelection/
-├── PLAN.md                 # 本计划文件
-├── CMakeLists.txt          # CMake构建配置
-├── src/
-│   ├── main.cpp            # 主程序入口
-│   ├── xml_parser.h/cpp    # XML解析
-│   ├── pair_features.h/cpp # 特征计算
-│   ├── pair_selector.h/cpp # 选择算法
-│   ├── pair_graph.h/cpp    # 图结构 (冗余检测)
-│   └── output_writer.h/cpp # 输出模块
-├── Datas/                  # 测试数据
-│   ├── 1/
-│   ├── 2/
-│   ├── 3/
-│   └── 4/
-└── output/                 # 输出结果
-```
-
----
-
-## 五、参数配置
+## 4. 输出格式
 
 ```cpp
-struct Config {
-    // 评分权重
-    double weight_overlap = 0.50;
-    double weight_angle = 0.30;
-    double weight_gsd = 0.10;
-    double weight_direction = 0.10;
+void writeThreeSectionPairs(const std::string& path,
+                            const PairSelectionResult& result) {
+    std::ofstream file(path);
 
-    // 选择参数
-    int minNeighborsPerPhoto = 2;   // 每张照片最少邻居数
-    int maxNeighborsPerPhoto = 8;   // 每张照片最多邻居数
-    double targetRedundancyRatio = 2.0;  // 目标冗余比 (相对于MST)
+    file << "#Graph of Views\n";
+    file << "#Version 2\n";
 
-    // 质量阈值
-    double maxConvergenceAngle = 30.0;  // 最大交会角 (度)
-    double maxGsdRatio = 1.5;           // 最大GSD比
-    int minCovisCount = 10;             // 最小共视点数
-};
+    // 区段1: 密集匹配对
+    file << result.densePairs.size() << "\n";
+    for (const auto& p : result.densePairs) {
+        file << p.first << " " << p.second << "\n";
+    }
+
+    // 区段2: Refine对
+    file << result.refinePairs.size() << "\n";
+    for (const auto& p : result.refinePairs) {
+        file << p.first << " " << p.second << "\n";
+    }
+
+    // 区段3: 三角形
+    file << result.triplets.size() << "\n";
+    for (const auto& t : result.triplets) {
+        file << t.id1 << " " << t.id2 << " " << t.id3 << "\n";
+    }
+}
 ```
 
----
+## 5. 实现计划
 
-## 六、验证指标
+### Phase 1: 三角形发现模块 (TripletFinder)
+- [x] 构建共视邻接表
+- [ ] 实现公共邻居搜索
+- [ ] 实现三角形质量评估
+- [ ] 贪心三角形选择
 
-### 6.1 定量指标
+### Phase 2: 密集对提取模块 (DensePairExtractor)
+- [ ] 从三角形提取边并统计出现次数
+- [ ] 边排序和选择
+- [ ] 连通性保证
 
-| 指标 | 目标值 | 验证方法 |
-|------|--------|---------|
-| 选择率 | ~3-6% | 选中数/候选数 |
-| 平均度 | ~4 | 总边数×2/节点数 |
-| 冗余比 | 1.8-2.2x | 边数/MST边数 |
-| 聚类系数 | >0.4 | 计算平均聚类系数 |
-| 连通性 | 100% | 验证图是否连通 |
+### Phase 3: Refine对生成模块 (RefinePairGenerator)
+- [ ] 以密集对为基础
+- [ ] 添加高共视候选
+- [ ] 确保BA优化需求
 
-### 6.2 与原始结果对比
+### Phase 4: 集成输出
+- [ ] 三段式输出格式
+- [ ] 与参考输出对比
+- [ ] 参数调优
 
-```cpp
-struct ComparisonResult {
-    int originalPairs;      // 原始选中数
-    int generatedPairs;     // 生成选中数
-    int matchingPairs;      // 完全匹配数
-    double precision;       // 精确率
-    double recall;          // 召回率
-    double f1Score;         // F1分数
-};
-```
+## 6. 预期效果
 
----
-
-## 七、时间估算
-
-| 阶段 | 任务 | 文件 |
+| 指标 | 当前 | 目标 |
 |------|------|------|
-| 1 | XML解析器实现 | xml_parser.h/cpp |
-| 2 | 特征计算实现 | pair_features.h/cpp |
-| 3 | 图结构与冗余检测 | pair_graph.h/cpp |
-| 4 | 选择算法实现 | pair_selector.h/cpp |
-| 5 | 主程序与输出 | main.cpp, output_writer.cpp |
-| 6 | 测试与验证 | 对比分析 |
+| F1 (vs 全部) | ~73% | >80% |
+| 密集对匹配率 | ~65% | >85% |
+| 三角形匹配率 | N/A | >80% |
+| 输出格式 | 单段 | 三段 |
+
+## 7. 关键参数
+
+```cpp
+struct TriangleConfig {
+    // 三角形选择
+    double targetTripletRatio = 0.65;       // 目标三角形/照片比
+    int minTriangleCovis = 30;              // 三角形最小边共视度
+    double minTriangleQuality = 0.3;        // 最小三角形质量
+
+    // 密集对选择
+    double denseToTripletRatio = 1.8;       // 密集对/三角形比
+    int minDenseCovis = 50;                 // 密集对最小共视度
+
+    // Refine对选择
+    double refineExpansion = 1.02;          // Refine扩展比例
+    int minRefineCovis = 30;                // Refine最小共视度
+};
+```
 
 ---
-
-## 八、风险与对策
-
-| 风险 | 对策 |
-|------|------|
-| XML解析大文件内存不足 | 流式解析，逐块处理 |
-| 冗余检测BFS性能问题 | 使用邻接表+visited数组优化 |
-| 评分权重不准确 | 提供配置文件可调参 |
-| 三角形保证过于严格 | 设置最小共同邻居阈值 |
-
----
-
-## 九、下一步行动
-
-1. **立即开始**: 创建项目结构和CMakeLists.txt
-2. **优先实现**: XML解析器（核心依赖）
-3. **迭代验证**: 每完成一个模块即运行测试
-4. **最终输出**: 生成pairs.txt并对比验证
-
----
-
-*计划创建时间: 2026-01-06*
-*基于4个数据集的逆向工程分析*
+*更新时间: 2025-01-07*
+*版本: v2.0 - 三段式输出策略*
