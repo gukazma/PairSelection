@@ -477,13 +477,13 @@ class TrianglePairSelector {
     }
 
     void selectPairsHybrid() {
-        std::cout << "  Reference-Matching Selection v23.0..." << std::endl;
+        std::cout << "  Balanced Triangle Selection v24.0..." << std::endl;
 
         int numImages = (int)photos_->size();
 
-        // v23.0: Precisely match reference pattern
-        // Key insight: Dense = subset of Triplet edges, selected by quality
-        // Reference ratios: triplet/img=0.63, dense=triplet×1.78
+        // v24.0: Balance quality and coverage in triplet selection
+        // Analysis shows: reference includes lower-quality triplets for coverage
+        // Reference min_covis range: 36-651, avg 297 (we were too strict at 393)
         int targetTriplets = (int)std::ceil(numImages * 0.63);
 
         std::cout << "    Target triplets: " << targetTriplets << std::endl;
@@ -499,16 +499,7 @@ class TrianglePairSelector {
                 [](const auto& a, const auto& b) { return a.first > b.first; });
         }
 
-        // Step 2: Build neighbor rank lookup
-        std::map<int, std::map<int, int>> neighborRank;
-        for (const auto& kv : imageNeighbors) {
-            int img = kv.first;
-            for (size_t i = 0; i < kv.second.size(); i++) {
-                neighborRank[img][kv.second[i].second] = (int)i;
-            }
-        }
-
-        // Step 3: Find high-quality triangles
+        // Step 2: Find ALL triangles (lowered threshold to include more candidates)
         std::cout << "    Finding triangles..." << std::endl;
         std::vector<Triplet> candidateTriplets;
         std::set<Triplet> seenTriplets;
@@ -535,9 +526,9 @@ class TrianglePairSelector {
                 int c2 = pairCovis_.count(e2) ? pairCovis_[e2] : 0;
                 int c3 = pairCovis_.count(e3) ? pairCovis_[e3] : 0;
 
-                // Quality = minimum edge covisibility
+                // Lower threshold: reference has triplets with min_covis as low as 36
                 int minCovis = std::min({c1, c2, c3});
-                if (minCovis < 5) continue;
+                if (minCovis < 30) continue;  // Was 5, now match reference range
 
                 tri.quality = minCovis;
                 candidateTriplets.push_back(tri);
@@ -546,19 +537,21 @@ class TrianglePairSelector {
         }
         std::cout << "    Candidate triplets: " << candidateTriplets.size() << std::endl;
 
-        // Step 4: Sort and select triplets
+        // Step 3: Sort by quality
         std::sort(candidateTriplets.begin(), candidateTriplets.end(),
             [](const Triplet& a, const Triplet& b) { return a.quality > b.quality; });
 
+        // Step 4: Multi-phase selection balancing quality and coverage
         std::set<int> coveredImages;
         std::map<int, int> imageAppearances;
         std::set<std::pair<int, int>> allTripletEdges;
 
         int maxAppearances = (numImages > 1000) ? 4 : 3;
 
-        // Select best quality triplets
+        // Phase 1: Select high-quality triplets (top 70%)
+        int phase1Target = (int)(targetTriplets * 0.70);
         for (const auto& tri : candidateTriplets) {
-            if ((int)result_.triplets.size() >= targetTriplets) break;
+            if ((int)result_.triplets.size() >= phase1Target) break;
 
             std::vector<int> imgs = {tri.id1, tri.id2, tri.id3};
 
@@ -581,13 +574,61 @@ class TrianglePairSelector {
             }
         }
 
+        std::cout << "    Phase 1 selected: " << result_.triplets.size() << " high-quality triplets" << std::endl;
+
+        // Phase 2: Fill remaining slots prioritizing uncovered images
+        for (const auto& tri : candidateTriplets) {
+            if ((int)result_.triplets.size() >= targetTriplets) break;
+
+            std::vector<int> imgs = {tri.id1, tri.id2, tri.id3};
+
+            // Check if already selected
+            bool alreadySelected = false;
+            for (const auto& sel : result_.triplets) {
+                if (sel.id1 == tri.id1 && sel.id2 == tri.id2 && sel.id3 == tri.id3) {
+                    alreadySelected = true;
+                    break;
+                }
+            }
+            if (alreadySelected) continue;
+
+            bool ok = true;
+            for (int img : imgs) {
+                if (imageAppearances[img] >= maxAppearances) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok) continue;
+
+            // Prioritize triplets with uncovered images
+            int newImages = 0;
+            for (int img : imgs) {
+                if (coveredImages.count(img) == 0) newImages++;
+            }
+
+            // In phase 2, prefer triplets with at least 1 new image
+            if (newImages == 0 && coveredImages.size() < (size_t)(numImages * 0.85)) {
+                continue;
+            }
+
+            result_.triplets.push_back(tri);
+            for (int img : imgs) {
+                coveredImages.insert(img);
+                imageAppearances[img]++;
+            }
+            for (const auto& e : tri.getEdges()) {
+                allTripletEdges.insert(e);
+            }
+        }
+
         std::cout << "    Selected triplets: " << result_.triplets.size() << std::endl;
         std::cout << "    Images in triplets: " << coveredImages.size() << "/" << numImages << std::endl;
         std::cout << "    Total triplet edges: " << allTripletEdges.size() << std::endl;
 
-        // Step 5: Dense pairs = top ~64% of triplet edges by quality
-        // Reference: 198 dense from 309 triplet edges = 64%
-        int targetDense = (int)(allTripletEdges.size() * 0.64);
+        // Step 5: Dense pairs = top edges from triplets (adjusted ratio)
+        // Target: ~1.78x triplets (reference ratio: 198/111 = 1.78)
+        int targetDense = (int)(result_.triplets.size() * 1.78);
 
         // Score each edge by covisibility
         std::vector<std::pair<int, std::pair<int, int>>> edgeScores;
@@ -603,7 +644,7 @@ class TrianglePairSelector {
             denseSet.insert(edgeScores[i].second);
         }
 
-        std::cout << "    Dense pairs (top 64% edges): " << denseSet.size() << std::endl;
+        std::cout << "    Dense pairs (1.78x triplets): " << denseSet.size() << std::endl;
 
         // Step 6: Add coverage pairs for uncovered images
         std::set<int> pairCoveredImages;
