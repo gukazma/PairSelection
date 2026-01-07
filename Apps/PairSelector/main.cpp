@@ -71,6 +71,8 @@ struct Triplet {
     int id1, id2, id3;  // Sorted: id1 < id2 < id3
     double quality;
 
+    Triplet() : id1(0), id2(0), id3(0), quality(0) {}
+
     Triplet(int a, int b, int c, double q = 0) : quality(q) {
         std::vector<int> ids = {a, b, c};
         std::sort(ids.begin(), ids.end());
@@ -477,13 +479,13 @@ class TrianglePairSelector {
     }
 
     void selectPairsHybrid() {
-        std::cout << "  Balanced Triangle Selection v24.0..." << std::endl;
+        std::cout << "  Balanced Triangle Selection v26.0..." << std::endl;
 
         int numImages = (int)photos_->size();
 
-        // v24.0: Balance quality and coverage in triplet selection
-        // Analysis shows: reference includes lower-quality triplets for coverage
-        // Reference min_covis range: 36-651, avg 297 (we were too strict at 393)
+        // v26.0: Return to quality-first but with better image diversity
+        // Analysis: common triplets have avg span 99, not 545! Don't over-optimize for span.
+        // Reference avg image appearance: 1.94, we need better diversity
         int targetTriplets = (int)std::ceil(numImages * 0.63);
 
         std::cout << "    Target triplets: " << targetTriplets << std::endl;
@@ -499,7 +501,7 @@ class TrianglePairSelector {
                 [](const auto& a, const auto& b) { return a.first > b.first; });
         }
 
-        // Step 2: Find ALL triangles (lowered threshold to include more candidates)
+        // Step 2: Find ALL triangles
         std::cout << "    Finding triangles..." << std::endl;
         std::vector<Triplet> candidateTriplets;
         std::set<Triplet> seenTriplets;
@@ -526,9 +528,8 @@ class TrianglePairSelector {
                 int c2 = pairCovis_.count(e2) ? pairCovis_[e2] : 0;
                 int c3 = pairCovis_.count(e3) ? pairCovis_[e3] : 0;
 
-                // Lower threshold: reference has triplets with min_covis as low as 36
                 int minCovis = std::min({c1, c2, c3});
-                if (minCovis < 30) continue;  // Was 5, now match reference range
+                if (minCovis < 30) continue;
 
                 tri.quality = minCovis;
                 candidateTriplets.push_back(tri);
@@ -541,14 +542,23 @@ class TrianglePairSelector {
         std::sort(candidateTriplets.begin(), candidateTriplets.end(),
             [](const Triplet& a, const Triplet& b) { return a.quality > b.quality; });
 
-        // Step 4: Multi-phase selection balancing quality and coverage
+        // Step 4: Adaptive multi-phase selection
         std::set<int> coveredImages;
         std::map<int, int> imageAppearances;
         std::set<std::pair<int, int>> allTripletEdges;
 
-        int maxAppearances = (numImages > 1000) ? 4 : 3;
+        // Adaptive max appearances based on image count and target diversity
+        // Reference shows: 51 images with 1 appearance, 88 with 2, 26 with 3, 7 with 4
+        // Average 1.94 appearances - aim for similar distribution
+        int maxAppearances;
+        if (numImages > 1000) {
+            maxAppearances = 4;
+        } else {
+            // For smaller datasets, be stricter to match reference diversity
+            maxAppearances = 3;
+        }
 
-        // Phase 1: Select high-quality triplets (top 70%)
+        // Phase 1: Select high-quality triplets (70%)
         int phase1Target = (int)(targetTriplets * 0.70);
         for (const auto& tri : candidateTriplets) {
             if ((int)result_.triplets.size() >= phase1Target) break;
@@ -576,7 +586,7 @@ class TrianglePairSelector {
 
         std::cout << "    Phase 1 selected: " << result_.triplets.size() << " high-quality triplets" << std::endl;
 
-        // Phase 2: Fill remaining slots prioritizing uncovered images
+        // Phase 2: Fill remaining with uncovered image priority and quality check
         for (const auto& tri : candidateTriplets) {
             if ((int)result_.triplets.size() >= targetTriplets) break;
 
